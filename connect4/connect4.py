@@ -200,7 +200,7 @@ def new_game_button_click():
         for col in range(7):
             b=button_list[row][col]
             b.is_clicked = False
-            b.configure(bg=config["button_default_bg"])
+            b.configure(bg="gray")
             b.configure(text="")
             field_button.game_over = False
 
@@ -308,7 +308,7 @@ def train_data():
     else:
         return 0
     model.fit(data, target, epochs=config["n_training_epochs"], verbose=False)
-
+    print("model "+config["model_name"]+" trained")
 
 def make_model():
     if e["model_name"].get() != "your_model_name":
@@ -341,7 +341,7 @@ def make_model():
             Dense(7),
             Activation('softmax'),
         ])
-        print("model made")
+        print("model "+config["model_name"]+" made")
     model.compile(optimizer='rmsprop',
                   loss='categorical_crossentropy',
                   metrics=['accuracy'])
@@ -384,30 +384,30 @@ new_game_button = Button(window,
 new_game_button.grid(column=3, row=12)
 
 e={}
-e[1] = Entry(window)
+e[1] = Entry(window, width = 5)
 e[1] .grid(row = 12, column =1)
 e[1] .delete(0, END)
 e[1] .insert(0, "Orange")
 
-e[-1] = Entry(window)
+e[-1] = Entry(window, width = 5)
 e[-1].grid(row = 12, column =5)
 e[-1].delete(0, END)
 e[-1].insert(0, "Blue")
 
-e["model_name"] = Entry(window)
-e["model_name"].grid(row = 13, column = 3)
+e["model_name"] = Entry(window, width = 10)
+e["model_name"].grid(row = 14, column = 3)
 e["model_name"].delete(0, END)
 e["model_name"].insert(0, "your_model_name")
 
 model_button = Button(window,
                         text="make model",
                         command=make_model)
-model_button.grid(column=2, row=14)
+model_button.grid(column=1, row=14)
 
 train_button = Button(window,
                         text="train model",
                         command=train_data)
-train_button.grid(column=4, row=14)
+train_button.grid(column=5, row=14)
 model = make_model()
 window.mainloop()
 
