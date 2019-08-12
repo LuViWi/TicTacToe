@@ -5,7 +5,7 @@ from keras.layers import Dense, Activation
 import sys
 from keras.models import model_from_json
 import os
-
+import time
 
 
 
@@ -30,34 +30,36 @@ class field_button:
         self.is_clicked = False
 
     def clicked(self):
+        player_dict = {1: player1_ai.get(),
+                       -1: player2_ai.get()}
         print(field_button.field)
+        print(field_button.player)
         field_button.current_choice = (self.row,self.col)
         if field_button.game_over:
             new_game_button_click()
         else:
             if field_button.player == 1:
                 c = "orange"
-                if not self.is_clicked:
-                    self.button.configure(bg=c)
-                    field_button.field[self.row, self.col] = field_button.player
-                    self.is_clicked = True
-                    check_var = self.check()
-                    if check_var == 0:
-                        if np.sum(np.abs(field_button.field), axis=None) == 9:
-                            new_game_button_click()
-                        else:
-                            field_button.player = -1
-                            ai_move()
+                t = "X"
             else:
                 c = "blue"
-                if not self.is_clicked:
-                    field_button.ai_wrong_moves = 0
-                    self.button.configure(bg=c)
-                    field_button.field[self.row, self.col] = field_button.player
-                    self.is_clicked = True
-                    self.check()
-                    field_button.player = 1
-                else:
+                t="O"
+            if not self.is_clicked:
+                self.button.configure(bg=c)
+                self.button.configure(text=t)
+                field_button.field[self.row, self.col] = field_button.player
+                self.is_clicked = True
+                check_var = self.check()
+                if check_var == 0:
+                    if np.sum(np.abs(field_button.field), axis=None) == 9:
+                        new_game_button_click()
+                    else:
+                        field_button.player = -field_button.player
+                        if player_dict[field_button.player] == 1:
+                            ai_move()
+
+            else:
+                if player_dict[field_button.player]==1:
                     field_button.ai_wrong_moves += 1
                     if field_button.ai_wrong_moves > 100:
                         sys.exit(0)
@@ -66,8 +68,12 @@ class field_button:
 
 
     def winner(self):
-        self.button.configure(text=str("Winner: "+str(field_button.player)))
-        if field_button.player == 1:
+        if field_button.player == 1 :
+            winner_alias = "Orange"
+        else:
+            winner_alias = "Blue"
+        self.button.configure(text=str("Winner: "+str(winner_alias)))
+        if (field_button.player == 1 and player1_ai.get() == 1) or (field_button.player == -1 and player2_ai.get() == 1):
             bad_move()
         else:
             good_move()
@@ -100,9 +106,10 @@ class field_button:
         return ret
 
 def ai_move():
-    prediction = model.predict(field_button.field.flatten().reshape((1,9)))
+    prediction = model.predict(field_button.field.flatten().reshape((1,9)))[0]
     index = np.argmax(prediction)
-    print("prediction: ",index)
+    print(prediction.reshape((3,3)))
+    print("prediction: ",index,prediction[index])
     row = index//3
     col = index%3
     button_list[row][col].clicked()
@@ -115,8 +122,7 @@ def save_model(model):
         f.write(model.to_json())
 
 def good_move():
-    data = field_button.field.flatten()
-    data = -field_button.field
+    data = field_button.player*field_button.field.flatten()
     target = np.zeros(9)
     row,col = field_button.current_choice
     index=3*row+col
@@ -126,7 +132,7 @@ def good_move():
 
 def bad_move():
     print("bad move")
-    data = -field_button.field.flatten()
+    data = -field_button.player*field_button.field.flatten()
     target = np.zeros(9)
     row,col = field_button.current_choice
     index=3*row+col
@@ -135,9 +141,9 @@ def bad_move():
     save_model(model)
 
 def wrong_move():
-    data = field_button.field.flatten()
+    data = field_button.player*field_button.field.flatten()
     target = np.ones(9)-np.abs(field_button.field.flatten())
-    target = target/np.sum(target)
+    target = target/max(np.sum(target),1)
     print("wrong move")
     model.fit(data.reshape((1, 9)), target.reshape((1, 9)), epochs=100, verbose=False)
     save_model(model)
@@ -153,6 +159,9 @@ def new_game_button_click():
             b.button.configure(bg="grey")
             b.button.configure(text="")
             field_button.game_over = False
+    if player1_ai.get() == 1:
+        ai_move()
+
 
 if os.path.isfile('model_architecture.json'):
     # Model reconstruction from JSON file
@@ -202,6 +211,10 @@ new_game_button = Button(window,
                         command=new_game_button_click)
 new_game_button.grid(column=1, row=8)
 
+player1_ai = IntVar()
+ch_1 = Checkbutton(window, text="player 2 AI", variable=player1_ai, bg = "orange").grid(row=8,column =0)
+player2_ai = IntVar()
+ch_1 = Checkbutton(window, text="player 2 AI", variable=player2_ai, bg = "blue",).grid(row=8,column =2)
 
 
 window.mainloop()
