@@ -8,6 +8,25 @@ import os
 import numpy as np
 import sys
 
+config = {
+    "windows_title": "Connect 4",
+    "window_geometrie": '800x800',
+    "button_default_bg": "green",
+    "max_wrong_moves":1000,
+    "n_training_epochs":1000,
+    "model_name":"connect4_model",
+    "weights":"weights",
+    "player":{1: {"bg":"orange",
+                  "alias": "Orange",
+                  "str":"X"
+                  },
+              -1 : {"bg":"blue",
+                  "alias": "Blue",
+                   "str":"O"
+                  }
+              }
+}
+
 def feld_anzeigen(feld):
     print(feld)
 
@@ -29,8 +48,6 @@ def move(player, s, feld,data=True):
     else:
         z = -1
     return z
-
-
 
 def check_horizontal(feld, resque=False):
     h1 = np.array([1, 1, 1, 1, 0, 0, 0])
@@ -100,36 +117,43 @@ def check(feld):
     return 0
 
 
-def pvp():
-    feld = np.zeros((7, 7))
-    feld_anzeigen(feld)
-    current_player = 1
+def make_model():
+    if e["model_name"].get() != "your_model_name":
+        config["model_name"] = e["model_name"].get()
 
-    while 1:
-        print("Spieler", current_player, "ist dran")
-        s = int(input("Welche Spalte? (0-6) / 99 für beenden"))
+    config["weights"] = config["model_name"] + "_weights"
+    if os.path.isfile(config["model_name"]+".json"):
+        # Model reconstruction from JSON file
+        with open(config["model_name"]+'.json', 'r') as f:
+            model = model_from_json(f.read())
 
-        if s == int(99):
-            break
+        # Load weights into the new model
+        model.load_weights(config["weights"]+'.h5')
+        model.compile(optimizer='rmsprop',
+                      loss='categorical_crossentropy',
+                      metrics=['accuracy'])
+        print("model"+config["model_name"]+"loaded")
 
-        if not s in range(7):
-            print("keine gültige zahl")
-            continue
+    else:
+        # AI PLAYER IS -1
+        model = Sequential([
+            Dense(70, input_shape=(49,)),
+            Activation('relu'),
+            Dense(60),
+            Activation('relu'),
+            Dense(40),
+            Activation('relu'),
+            Dense(20),
+            Activation('relu'),
+            Dense(7),
+            Activation('softmax'),
+        ])
+        print("model "+config["model_name"]+" made")
+    model.compile(optimizer='rmsprop',
+                  loss='categorical_crossentropy',
+                  metrics=['accuracy'])
 
-        move(current_player, s, feld)
-        feld_anzeigen(feld)
-        current_player *= -1
-
-        check_it = check(feld)
-
-        if not check_it == int(0):
-            print("Player", check_it, "won")
-            break
-
-    #make_data(0, 0, 0, check_it)
-    print("ende")
-
-
+    return model
 
 def save_model(model):
     model.save_weights(config["weights"]+'.h5')
@@ -137,6 +161,32 @@ def save_model(model):
     # Save the model architecture
     with open(config["model_name"]+'.json', 'w') as f:
         f.write(model.to_json())
+
+def make_data(data,target):
+
+    if os.path.isfile(config["model_name"]+"_data.npy"):
+        old_data=np.load(config["model_name"]+"_data.npy","r")
+    else:
+        old_data = np.zeros(49)
+    if os.path.isfile(config["model_name"]+"_target.npy"):
+        old_target=np.load(config["model_name"]+"_target.npy","r")
+    else:
+        old_target = np.zeros(7)
+    print(len(old_target))
+    np.save(config["model_name"]+"_data.npy",np.vstack((data,old_data)))
+    np.save(config["model_name"] + "_target.npy", np.vstack((target, old_target)))
+
+def train_data():
+    if os.path.isfile(config["model_name"]+"_data.npy"):
+        data=np.load(config["model_name"]+"_data.npy","r")
+    else:
+        return 0
+    if os.path.isfile(config["model_name"]+"_target.npy"):
+        target=np.load(config["model_name"]+"_target.npy","r")
+    else:
+        return 0
+    model.fit(data, target, epochs=config["n_training_epochs"], verbose=False)
+    print("model "+config["model_name"]+" trained")
 
 
 def good_move():
@@ -170,29 +220,6 @@ def wrong_move():
     save_model(model)
 
 
-
-
-config = {
-    "windows_title": "Connect 4",
-    "window_geometrie": '800x800',
-    "button_default_bg": "green",
-    "max_wrong_moves":1000,
-    "n_training_epochs":200,
-    "model_name":"connect4_model",
-    "weights":"weights",
-    "player":{1: {"bg":"orange",
-                  "alias": "Orange",
-                  "str":"X"
-                  },
-              -1 : {"bg":"blue",
-                  "alias": "Blue",
-                   "str":"O"
-                  }
-              }
-}
-
-
-
 def new_game_button_click():
     field_button.player = 1
     field_button.field = np.zeros((7, 7))
@@ -212,7 +239,6 @@ def ai_move():
     index = np.argmax(prediction)
     print("prediction: ",index,prediction[index])
     control_button_list[index].clicked()
-
 
 class field_button:
     player = 1
@@ -236,8 +262,6 @@ class field_button:
         self.is_clicked = False
 
     def clicked(self):
-        print(field_button.player)
-        print(field_button.field)
         ai_player_dict = {1: player1_ai.get(),
                        -1: player2_ai.get()}
         c = config["player"][field_button.player]["bg"]
@@ -250,8 +274,6 @@ class field_button:
                 pre_field = np.array(field_button.field)
                 field_button.field[row,self.index]=field_button.player
                 button_list[row][self.index].config(bg=c)
-
-                print(field_button.player, player1_ai.get(), player2_ai.get())
 
                 check_var = check(field_button.field)
                 if check_var == 0:
@@ -284,69 +306,6 @@ class field_button:
         else:
             new_game_button_click()
 
-def make_data(data,target):
-
-    if os.path.isfile(config["model_name"]+"_data.npy"):
-        old_data=np.load(config["model_name"]+"_data.npy","r")
-    else:
-        old_data = np.zeros(49)
-    if os.path.isfile(config["model_name"]+"_target.npy"):
-        old_target=np.load(config["model_name"]+"_target.npy","r")
-    else:
-        old_target = np.zeros(7)
-    print(len(old_target))
-    np.save(config["model_name"]+"_data.npy",np.vstack((data,old_data)))
-    np.save(config["model_name"] + "_target.npy", np.vstack((target, old_target)))
-
-def train_data():
-    if os.path.isfile(config["model_name"]+"_data.npy"):
-        data=np.load(config["model_name"]+"_data.npy","r")
-    else:
-        return 0
-    if os.path.isfile(config["model_name"]+"_target.npy"):
-        target=np.load(config["model_name"]+"_target.npy","r")
-    else:
-        return 0
-    model.fit(data, target, epochs=config["n_training_epochs"], verbose=False)
-    print("model "+config["model_name"]+" trained")
-
-def make_model():
-    if e["model_name"].get() != "your_model_name":
-        config["model_name"] = e["model_name"].get()
-
-    config["weights"] = config["model_name"] + "_weights"
-    if os.path.isfile(config["model_name"]+".json"):
-        # Model reconstruction from JSON file
-        with open(config["model_name"]+'.json', 'r') as f:
-            model = model_from_json(f.read())
-
-        # Load weights into the new model
-        model.load_weights(config["weights"]+'.h5')
-        model.compile(optimizer='rmsprop',
-                      loss='categorical_crossentropy',
-                      metrics=['accuracy'])
-        print(config["model_name"]+"model loaded")
-
-    else:
-        # AI PLAYER IS -1
-        model = Sequential([
-            Dense(70, input_shape=(49,)),
-            Activation('relu'),
-            Dense(60),
-            Activation('relu'),
-            Dense(40),
-            Activation('relu'),
-            Dense(20),
-            Activation('relu'),
-            Dense(7),
-            Activation('softmax'),
-        ])
-        print("model "+config["model_name"]+" made")
-    model.compile(optimizer='rmsprop',
-                  loss='categorical_crossentropy',
-                  metrics=['accuracy'])
-
-    return model
 
 
 window = Tk()
