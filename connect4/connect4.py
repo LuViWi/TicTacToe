@@ -11,43 +11,31 @@ import sys
 config = {
     "windows_title": "Connect 4",
     "window_geometrie": '800x800',
-    "button_default_bg": "green",
+    "window_color": "deep sky blue",
+    "button_default_bg": "cyan",
+    "control button color": "steel blue",
     "max_wrong_moves":1000,
-    "n_training_epochs":1000,
+    "n_training_epochs":4,
     "model_name":"connect4_model",
     "weights":"weights",
-    "player":{1: {"bg":"orange",
-                  "alias": "Orange",
+    "player":{1: {"bg":"medium aquamarine",
+                  "alias": "Player 1",
                   "str":"X"
                   },
-              -1 : {"bg":"blue",
-                  "alias": "Blue",
+              -1 : {"bg":"light coral",
+                  "alias": "Player 2",
                    "str":"O"
                   }
               }
 }
 
-def feld_anzeigen(feld):
-    print(feld)
 
 def gültiges_feld(s, feld):
     # s ist die input spalte typ int
     for i in [6, 5, 4, 3, 2, 1, 0]:
         if feld[i][int(s)] == int(0):
             return i
-    print("die spalte",s,"ist voll")
-    return -1
-
-
-def move(player, s, feld,data=True):
-    z = gültiges_feld(s,feld)
-    if z!= -1:
-        feld[z][s] = int(player)
-        #    if data:
-        #        make_data(z,s,player,0)
-    else:
-        z = -1
-    return z
+    return None
 
 def check_horizontal(feld, resque=False):
     h1 = np.array([1, 1, 1, 1, 0, 0, 0])
@@ -122,7 +110,8 @@ def make_model():
         config["model_name"] = e["model_name"].get()
 
     config["weights"] = config["model_name"] + "_weights"
-    if os.path.isfile(config["model_name"]+".json"):
+    if os.path.isfile(config["model_name"]+".json") \
+            and e["model_name"].get() != "your_model_name":
         # Model reconstruction from JSON file
         with open(config["model_name"]+'.json', 'r') as f:
             model = model_from_json(f.read())
@@ -132,15 +121,24 @@ def make_model():
         model.compile(optimizer='rmsprop',
                       loss='categorical_crossentropy',
                       metrics=['accuracy'])
-        print("model"+config["model_name"]+"loaded")
+        print("model "+config["model_name"]+" loaded")
+        model.compile(optimizer='rmsprop',
+                      loss='categorical_crossentropy',
+                      metrics=['accuracy'])
 
     else:
         # AI PLAYER IS -1
         model = Sequential([
             Dense(70, input_shape=(49,)),
+            Activation('sigmoid'),
+            Dense(90),
+            Activation('sigmoid'),
+            Dense(124),
             Activation('relu'),
-            Dense(60),
-            Activation('relu'),
+            Dense(90),
+            Activation('sigmoid'),
+            Dense(70),
+            Activation('sigmoid'),
             Dense(40),
             Activation('relu'),
             Dense(20),
@@ -149,9 +147,9 @@ def make_model():
             Activation('softmax'),
         ])
         print("model "+config["model_name"]+" made")
-    model.compile(optimizer='rmsprop',
-                  loss='categorical_crossentropy',
-                  metrics=['accuracy'])
+        model.compile(optimizer='rmsprop',
+                      loss='categorical_crossentropy',
+                      metrics=['accuracy'])
 
     return model
 
@@ -189,9 +187,9 @@ def train_data():
     print("model "+config["model_name"]+" trained")
 
 
-def good_move():
+def good_move(pre_field):
     print("good move")
-    data = field_button.player*field_button.field.flatten()
+    data = field_button.player*pre_field.flatten()
     target = np.zeros(7)
     index = field_button.current_choice
     target[index] = 1
@@ -199,9 +197,9 @@ def good_move():
     save_model(model)
     make_data(data.reshape((1,49)),target.reshape((1,7)))
 
-def bad_move():
+def bad_move(pre_field):
     print("bad move")
-    data = -field_button.player*field_button.field.flatten()
+    data = -field_button.player*pre_field.flatten()
     target = np.zeros(7)
     index = field_button.current_choice
     target[index] = 1
@@ -209,12 +207,12 @@ def bad_move():
     save_model(model)
     make_data(data.reshape((1, 49)), target.reshape((1, 7)))
 
-def wrong_move():
-    data = field_button.player*field_button.field.flatten()
-    target = np.ones(7)
-    target[field_button.current_choice] = 0
+def wrong_move(pre_field):
+    data = field_button.player*pre_field.flatten()
+    target = np.ones(7)-np.abs(pre_field[0])
+   # target[field_button.current_choice] = 0
     target = target/max(np.sum(target),1)
-    print("wrong move")
+    print("wrong move! field_size=",str(np.sum(np.abs(pre_field),axis=None)))
     model.fit(data.reshape((1, 49)), target.reshape((1, 7)), epochs=config["n_training_epochs"], verbose=False)
     model.fit(-data.reshape((1, 49)), target.reshape((1, 7)), epochs=config["n_training_epochs"], verbose=False)
     save_model(model)
@@ -227,9 +225,10 @@ def new_game_button_click():
         for col in range(7):
             b=button_list[row][col]
             b.is_clicked = False
-            b.configure(bg="gray")
+            b.configure(bg=config["button_default_bg"])
             b.configure(text="")
-            field_button.game_over = False
+    field_button.move_number = 0
+    field_button.game_over = False
 
     if player1_ai.get() == 1:
         ai_move()
@@ -238,7 +237,11 @@ def ai_move():
     prediction = model.predict(field_button.field.flatten().reshape((1,49)))[0]
     index = np.argmax(prediction)
     print("prediction: ",index,prediction[index])
+    row = gültiges_feld(index, field_button.field)
+    if row != None:
+        button_list[row][index].config(text=str(prediction[index])+"\nmove nr: "+str(field_button.move_number))
     control_button_list[index].clicked()
+
 
 class field_button:
     player = 1
@@ -246,6 +249,7 @@ class field_button:
     game_over = False
     current_choice = (None,None)
     ai_wrong_moves = 0
+    move_number = 0
 
     def __init__(self,window,row,col):
         self.index = col
@@ -254,7 +258,7 @@ class field_button:
         self.col = col
         self.button = Button(window,
                             text="",
-                             bg=config["button_default_bg"],
+                             bg=config["control button color"],
                             command=self.clicked,
                              )
         self.button.config(width = 5,height = 5)
@@ -262,20 +266,22 @@ class field_button:
         self.is_clicked = False
 
     def clicked(self):
+        print(field_button.field)
         ai_player_dict = {1: player1_ai.get(),
                        -1: player2_ai.get()}
         c = config["player"][field_button.player]["bg"]
         t = config["player"][field_button.player]["str"]
         row = gültiges_feld(self.index,field_button.field)
         field_button.current_choice = self.index
+        pre_field = np.array(field_button.field)
         if not field_button.game_over:
-            if row != -1:
+            if row != None:
+                field_button.move_number += 1
                 field_button.ai_wrong_moves = 0
-                pre_field = np.array(field_button.field)
                 field_button.field[row,self.index]=field_button.player
                 button_list[row][self.index].config(bg=c)
 
-                check_var = check(field_button.field)
+                check_var = check(np.copy(field_button.field))
                 if check_var == 0:
                     if np.sum(np.abs(field_button.field), axis=None) == 49:
                         new_game_button_click()
@@ -284,15 +290,16 @@ class field_button:
                         if ai_player_dict[field_button.player] == 1:
                             ai_move()
                 else:
-                    button_list[row][self.index].config(text="Winner "+config ["player"][field_button.player]["alias"])
+                    text = button_list[row][self.index]["text"]
+                    button_list[row][self.index].config(text=config ["player"][field_button.player]["alias"]+" wins\n"+text)
                     if (field_button.player == 1 and player1_ai.get() == 1):
-                        good_move()
+                        good_move(pre_field)
                     if (field_button.player == -1 and player2_ai.get() == 1):
-                        good_move()
+                        good_move(pre_field)
                     if (field_button.player == 1 and player2_ai.get() == 1):
-                        bad_move()
+                        bad_move(pre_field)
                     if (field_button.player == -1 and player1_ai.get() == 1):
-                        bad_move()
+                        bad_move(pre_field)
                     field_button.game_over=True
 
 
@@ -301,7 +308,7 @@ class field_button:
                     field_button.ai_wrong_moves += 1
                 if field_button.ai_wrong_moves > config["max_wrong_moves"]:
                     sys.exit(0)
-                wrong_move()
+                wrong_move(pre_field)
                 ai_move()
         else:
             new_game_button_click()
@@ -310,6 +317,7 @@ class field_button:
 
 window = Tk()
 window.geometry(config["window_geometrie"])
+window.config(background=config["window_color"])
 
 lbl = Label(window, text=config["windows_title"])
 lbl.grid(column=3, row=0)
@@ -320,7 +328,7 @@ for row in range(7):
     for col in range(7):
         button_list[row][col] =Button(window,
                             text="",
-                             bg="gray",
+                             bg=config["button_default_bg"],
                             command=None,
                              )
         button_list[row][col].config(width = 8,height = 4)
@@ -331,10 +339,12 @@ for col in range(7):
     control_button_list[col] = field_button(window,9,col)
 
 player1_ai = IntVar()
-ch_1 = Checkbutton(window, text="player 1 AI", variable=player1_ai, bg = "orange")
+ch_1 = Checkbutton(window, text="player 1 AI", variable=player1_ai,
+                   bg = config["player"][1]["bg"])
 ch_1.grid(row=11,column =2)
 player2_ai = IntVar()
-ch_2 = Checkbutton(window, text="player 2 AI", variable=player2_ai, bg = "blue",)
+ch_2 = Checkbutton(window, text="player 2 AI", variable=player2_ai,
+                   bg = config["player"][-1]["bg"])
 ch_2.grid(row=11,column =4)
 
 new_game_button = Button(window,
